@@ -1,0 +1,12 @@
+#/!bin/bash
+
+gcc petit-comp.c -o petit-comp            #compilation du petit compilateur
+
+echo Test du premier Programme:
+./petit-comp < test.c                     #test du programmme donne en demo
+
+echo Test des operateurs aditionels:
+./petit-comp < Test_mult.c
+
+echo Test des operateur aditionel:
+./petit-comp < test_t.c
