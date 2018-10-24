@@ -12,26 +12,28 @@
 
 int l_num = 1;  //compte la ligne du code analyser
 
-enum { DO_SYM, ELSE_SYM, IF_SYM, WHILE_SYM, PRINT_SYM, LBRA, RBRA, LPAR,
+enum { DO_SYM, ELSE_SYM, IF_SYM, WHILE_SYM, PRINT_SYM, GOTO_SYM, LBRA, RBRA, LPAR,
        RPAR, PLUS, MINUS, LESS, SEMI, EQUAL, INT, ID, EOI, STAR, PERC, SLASH,
-       GREATER, EXCLM};
+       GREATER, EXCLM, COLON};
 
-char *words[] = { "do", "else", "if", "while", "print", NULL };
+char *words[] = { "do", "else", "if", "while", "print","goto" NULL };
 
 int ch = ' ';
 int sym;
 int last_sym; //etre capable de regarder a l'arriere si necessaire
 int int_val;
 char id_name[100];
+char labels[100]; //Storer les valeurs relative a zero
 
 void syntax_error(int cas)
 {
   switch (cas)
   {
   case 1: printf("Problem with end of file on line %d \n", l_num); break;
-  case 2: printf("Problem with reading expression on line %d \n", l_num); break;
+  case 2: printf("Problem with reading expression aka missing a ';' on line %d \n", l_num); break;
   case 3: printf("Problem in syntax analysis on line %d \n", l_num); break;
   case 4: printf("Problem in syntax analysis not a letter or number on line %d %d\n", l_num,sym); break;
+  case 5: printf("Invalid label name on line %d \n", l_num);break;
   default:printf("syntax error on line %d\n", l_num);
   }
   exit(1); }
@@ -56,6 +58,7 @@ void next_sym()
       case '/': sym = SLASH;   next_ch(); break;
       case '>': sym = GREATER; next_ch(); break;
       case '!': sym = EXCLM;   next_ch(); break;
+      case ':': sym = COLON;   next_ch(); break;
       case EOF: sym = EOI;     next_ch(); break;
       default:
         if (ch >= '0' && ch <= '9')
@@ -100,7 +103,8 @@ void next_sym()
 /* Analyseur syntaxique. */
 
 enum { VAR, CST, ADD, SUB, LT, GT, NOEQ, EQ, LTEQ, GTEQ, ASSIGN,
-       IF1, IF2, WHILE, DO, EMPTY, SEQ, EXPR, PROG, PRINT, MULT, MOD, DIV };
+       IF1, IF2, WHILE, DO, EMPTY, SEQ, EXPR, PROG, PRINT, MULT, MOD, DIV, LABEL
+       GOTO};
 
 struct node
   {
@@ -310,11 +314,26 @@ node *statement()
     x -> o1 = paren_expr();  //l'erreur de syntax est gere dans le cas de paren_expr
     if (sym == SEMI) next_sym(); else syntax_error(2);
   }
+
+  else if (sym == GOTO_SYM)
+  {
+    x = new_node(GOTO);
+    next_sym();
+    x->o1 = expr();
+    if (sym == SEMI) next_sym(); else syntax_error(2);
+  }
+
   else                     /* <expr> ";" */
     {
       x = new_node(EXPR);
       x->o1 = expr();
-      if (sym == SEMI) next_sym(); else syntax_error(2);
+      if (sym == COLON) //Repere et test les labels
+      {
+        if(labels[x->o1->val] == 1) syntax_error(5); //Verifie si un label est deja utiliser
+        x->kind = LABEL; labels[x->o1->val] = 1;
+        next_sym();
+      }
+      else if (sym == SEMI) next_sym(); else syntax_error(2);
     }
 
   return x;
@@ -450,6 +469,14 @@ void c(node *x)
                      c(x->o2);
                      gi(IFNE); fix(here++,p1); break;
                    }
+      case GOTO  : {
+                    gi(GOTO); 
+                   }
+
+
+      case LABEL : {
+                     labels[x->o1->val] = here-object; break;
+                   }
 
       case EMPTY : break;
 
@@ -509,8 +536,12 @@ int main()
 {
   int i;
 
+  for (i=0; i<26; i++) //Initialise les valeurs des labes a zero
+    labels[i] = 0;
+
   c(program());
 
+  printf("%d\n",labels[0]);
 #ifdef SHOW_CODE
   printf("\n");
 #endif
