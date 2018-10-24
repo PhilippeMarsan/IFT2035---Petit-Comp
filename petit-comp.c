@@ -32,7 +32,7 @@ void syntax_error(int cas)
   case 2: printf("Problem with reading expression on line %d \n", l_num); break;
   case 3: printf("Problem in syntax analysis on line %d \n", l_num); break;
   case 4: printf("Problem in syntax analysis not a letter or number on line %d %d\n", l_num,sym); break;
-  default: fprintf(stderr, "syntax error\n");
+  default:printf("syntax error on line %d\n", l_num);
   }
   exit(1); }
 
@@ -199,20 +199,20 @@ node *test() /* <test> ::= <sum> | <sum> "<" <sum>| <sum> "<=" <sum>| <sum> ">" 
       last_sym = sym;
       switch(sym)
       {
-        case LESS: next_sym(); if (sym == EQUAL) {x = new_node(LTEQ); next_sym();}
-                               else x = new_node(LT);
-                               break;
+        case LESS:    next_sym(); if (sym == EQUAL) {x = new_node(LTEQ); next_sym();}
+                                  else x = new_node(LT);
+                                  break;
         case GREATER: next_sym(); if (sym == EQUAL) {x = new_node(GTEQ); next_sym();}
                                   else x = new_node(GT);
                                   break;
-        case EXCLM: next_sym(); if(sym == EQUAL) { x = new_node(NOEQ); next_sym();}
-                                else syntax_error(4);
-                                break;
-        case EQUAL: next_sym(); if(sym == EQUAL) { x = new_node(EQ); next_sym();}
+        case EXCLM:   next_sym(); if(sym == EQUAL) { x = new_node(NOEQ); next_sym();}
+                                  else syntax_error(4);
+                                  break;
+        case EQUAL:   next_sym(); if(sym == EQUAL) { x = new_node(EQ); next_sym();}
                                   else return x;
                                   break;
       }
-      last_sym = 12;
+      last_sym = 12; //Met un new line une fois le symbole consommer
       x->o1 = t;
       x->o2 = sum();
     }
@@ -230,10 +230,9 @@ node *expr() /* <expr> ::= <test> | <id> "=" <expr> */
 
   if (last_sym == EQUAL)
     {
-      last_sym = 12;
+      last_sym = 12; //Met un new line une fois le symbole consommer
       node *t = x;
       x = new_node(ASSIGN);
-      next_sym();
       x->o1 = t;
       x->o2 = expr();
     }
@@ -413,7 +412,8 @@ void c(node *x)
                    gi(POP);
                    gi(BIPUSH); g(0);break;
 
-      case NOEQ  : c(x->o1);
+      case NOEQ  : gi(BIPUSH); g(1);
+                   c(x->o1);
                    c(x->o2);
                    gi(ISUB);
                    gi(IFNE); g(4);
