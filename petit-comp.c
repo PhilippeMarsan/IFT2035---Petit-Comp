@@ -20,6 +20,7 @@ char *words[] = { "do", "else", "if", "while", "print", NULL };
 
 int ch = ' ';
 int sym;
+int last_sym; //etre capable de regarder a l'arriere si necessaire
 int int_val;
 char id_name[100];
 
@@ -195,6 +196,7 @@ node *test() /* <test> ::= <sum> | <sum> "<" <sum>| <sum> "<=" <sum>| <sum> ">" 
   if (sym == LESS || sym == GREATER || sym == EQUAL || sym == EXCLM)
     {
       node *t = x;
+      last_sym = sym;
       switch(sym)
       {
         case LESS: next_sym(); if (sym == EQUAL) {x = new_node(LTEQ); next_sym();}
@@ -207,9 +209,10 @@ node *test() /* <test> ::= <sum> | <sum> "<" <sum>| <sum> "<=" <sum>| <sum> ">" 
                                 else syntax_error(4);
                                 break;
         case EQUAL: next_sym(); if(sym == EQUAL) { x = new_node(EQ); next_sym();}
-                                else syntax_error(4);
-                                break;
+                                  else return x;
+                                  break;
       }
+      last_sym = 12;
       x->o1 = t;
       x->o2 = sum();
     }
@@ -225,8 +228,9 @@ node *expr() /* <expr> ::= <test> | <id> "=" <expr> */
 
   x = test();
 
-  if (sym == EQUAL)
+  if (last_sym == EQUAL)
     {
+      last_sym = 12;
       node *t = x;
       x = new_node(ASSIGN);
       next_sym();
