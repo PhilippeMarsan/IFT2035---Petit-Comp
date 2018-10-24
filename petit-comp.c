@@ -16,11 +16,10 @@ enum { DO_SYM, ELSE_SYM, IF_SYM, WHILE_SYM, PRINT_SYM, GOTO_SYM, LBRA, RBRA, LPA
        RPAR, PLUS, MINUS, LESS, SEMI, EQUAL, INT, ID, EOI, STAR, PERC, SLASH,
        GREATER, EXCLM, COLON};
 
-char *words[] = { "do", "else", "if", "while", "print","goto" NULL };
+char *words[] = { "do", "else", "if", "while", "print","goto", NULL };
 
 int ch = ' ';
 int sym;
-int last_sym; //etre capable de regarder a l'arriere si necessaire
 int int_val;
 char id_name[100];
 char labels[100]; //Storer les valeurs relative a zero
@@ -32,8 +31,10 @@ void syntax_error(int cas)
   case 1: printf("Problem with end of file on line %d \n", l_num); break;
   case 2: printf("Problem with reading expression aka missing a ';' on line %d \n", l_num); break;
   case 3: printf("Problem in syntax analysis on line %d \n", l_num); break;
-  case 4: printf("Problem in syntax analysis not a letter or number on line %d %d\n", l_num,sym); break;
+  case 4: printf("Problem in syntax analysis not a letter or number on line %d\n", l_num); break;
   case 5: printf("Invalid label name on line %d \n", l_num);break;
+  case 6: printf("Expecting a paranthese on line %d\n", l_num);break;
+  case 7: printf("Expecting a first paranthese on line %d\n", l_num);break;
   default:printf("syntax error on line %d\n", l_num);
   }
   exit(1); }
@@ -103,8 +104,8 @@ void next_sym()
 /* Analyseur syntaxique. */
 
 enum { VAR, CST, ADD, SUB, LT, GT, NOEQ, EQ, LTEQ, GTEQ, ASSIGN,
-       IF1, IF2, WHILE, DO, EMPTY, SEQ, EXPR, PROG, PRINT, MULT, MOD, DIV, LABEL
-       GOTO};
+       IF1, IF2, WHILE, DO, EMPTY, SEQ, EXPR, PROG, PRINT, MULT, MOD, DIV, LABEL,
+       GOTON};
 
 struct node
   {
@@ -197,10 +198,9 @@ node *test() /* <test> ::= <sum> | <sum> "<" <sum>| <sum> "<=" <sum>| <sum> ">" 
 {
   node *x = sum();
 
-  if (sym == LESS || sym == GREATER || sym == EQUAL || sym == EXCLM)
+  if (sym == LESS || sym == GREATER || sym == EXCLM)
     {
       node *t = x;
-      last_sym = sym;
       switch(sym)
       {
         case LESS:    next_sym(); if (sym == EQUAL) {x = new_node(LTEQ); next_sym();}
@@ -212,15 +212,10 @@ node *test() /* <test> ::= <sum> | <sum> "<" <sum>| <sum> "<=" <sum>| <sum> ">" 
         case EXCLM:   next_sym(); if(sym == EQUAL) { x = new_node(NOEQ); next_sym();}
                                   else syntax_error(4);
                                   break;
-        case EQUAL:   next_sym(); if(sym == EQUAL) { x = new_node(EQ); next_sym();}
-                                  else return x;
-                                  break;
       }
-      last_sym = 12; //Met un new line une fois le symbole consommer
       x->o1 = t;
       x->o2 = sum();
     }
-
   return x;
 }
 
@@ -228,19 +223,27 @@ node *expr() /* <expr> ::= <test> | <id> "=" <expr> */
 {
   node *x;
 
-  if (sym != ID) return test();
-
   x = test();
 
-  if (last_sym == EQUAL)
+  if (sym == EQUAL)
     {
-      last_sym = 12; //Met un new line une fois le symbole consommer
       node *t = x;
-      x = new_node(ASSIGN);
-      x->o1 = t;
-      x->o2 = expr();
+      next_sym();
+      if(sym == EQUAL) //Test si il s'agit d'un test ou un assign
+      {
+        printf("Creating a test of equality");
+        x = new_node(EQ);
+        next_sym();
+        x->o1 = t;
+        x->o2 = sum();
+      }
+      else
+      {
+        x = new_node(ASSIGN);
+        x->o1 = t;
+        x->o2 = expr();
+      }
     }
-
   return x;
 }
 
@@ -248,11 +251,11 @@ node *paren_expr() /* <paren_expr> ::= "(" <expr> ")" */
 {
   node *x;
 
-  if (sym == LPAR) next_sym(); else syntax_error(0);
+  if (sym == LPAR) next_sym(); else syntax_error(7);
 
   x = expr();
 
-  if (sym == RPAR) next_sym(); else syntax_error(0);
+  if (sym == RPAR) next_sym(); else syntax_error(6);
 
   return x;
 }
@@ -317,7 +320,7 @@ node *statement()
 
   else if (sym == GOTO_SYM)
   {
-    x = new_node(GOTO);
+    x = new_node(GOTON);
     next_sym();
     x->o1 = expr();
     if (sym == SEMI) next_sym(); else syntax_error(2);
@@ -469,10 +472,10 @@ void c(node *x)
                      c(x->o2);
                      gi(IFNE); fix(here++,p1); break;
                    }
-      case GOTO  : {
-                    gi(GOTO); 
-                   }
 
+      case GOTON : {
+                    gi(GOTO);
+                   }
 
       case LABEL : {
                      labels[x->o1->val] = here-object; break;
@@ -536,12 +539,11 @@ int main()
 {
   int i;
 
-  for (i=0; i<26; i++) //Initialise les valeurs des labes a zero
+  for (i=0; i<26; i++) //Initialise les valeurs des labels a zero
     labels[i] = 0;
 
   c(program());
 
-  printf("%d\n",labels[0]);
 #ifdef SHOW_CODE
   printf("\n");
 #endif
