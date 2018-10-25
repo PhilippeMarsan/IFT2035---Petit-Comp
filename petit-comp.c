@@ -12,17 +12,17 @@
 
 int l_num = 1;  //compte la ligne du code analyser
 
-enum { DO_SYM, ELSE_SYM, IF_SYM, WHILE_SYM, PRINT_SYM, GOTO_SYM, LBRA, RBRA, LPAR,
+enum { DO_SYM, ELSE_SYM, IF_SYM, WHILE_SYM, PRINT_SYM, GOTO_SYM, BRK_SYM, CON_SYM, LBRA, RBRA, LPAR,
        RPAR, PLUS, MINUS, LESS, SEMI, EQUAL, INT, ID, EOI, STAR, PERC, SLASH,
        GREATER, EXCLM, COLON};
 
-char *words[] = { "do", "else", "if", "while", "print","goto", NULL };
+char *words[] = { "do", "else", "if", "while", "print","goto", "break", "continue",NULL };
 
 int ch = ' ';
 int sym;
 int int_val;
 char id_name[100];
-char labels[100]; //Storer les valeurs relative a zero
+char labels[100];
 
 void syntax_error(int cas)
 {
@@ -104,8 +104,8 @@ void next_sym()
 /* Analyseur syntaxique. */
 
 enum { VAR, CST, ADD, SUB, LT, GT, NOEQ, EQ, LTEQ, GTEQ, ASSIGN,
-       IF1, IF2, WHILE, DO, EMPTY, SEQ, EXPR, PROG, PRINT, MULT, MOD, DIV, LABEL,
-       GOTON};
+       IF1, IF2, WHILE, DO, EMPTY, SEQ, EXPR, PROG, PRINT,
+       MULT, MOD, DIV, LABEL, GOTON, BREAK, CONT};
 
 struct node
   {
@@ -231,7 +231,6 @@ node *expr() /* <expr> ::= <test> | <id> "=" <expr> */
       next_sym();
       if(sym == EQUAL) //Test si il s'agit d'un test ou un assign
       {
-        printf("Creating a test of equality");
         x = new_node(EQ);
         next_sym();
         x->o1 = t;
@@ -318,11 +317,29 @@ node *statement()
     if (sym == SEMI) next_sym(); else syntax_error(2);
   }
 
-  else if (sym == GOTO_SYM)
+  else if (sym == GOTO_SYM) /*"goto" <id> ";"*/
   {
     x = new_node(GOTON);
     next_sym();
     x->o1 = expr();
+    if (sym == SEMI) next_sym(); else syntax_error(2);
+  }
+
+  else if (sym == BRK_SYM) /*"break" [ <id> ] ";"*/
+  {
+    x = new_node(BREAK);
+    next_sym();
+    if (sym != SEMI) x->o1 = expr();
+    else x->o1 = new_node(EMPTY);
+    if (sym == SEMI) next_sym(); else syntax_error(2);
+  }
+
+  else if (sym == CON_SYM) /*"continue" [ <id> ] ";"*/
+  {
+    x = new_node(CONT);
+    next_sym();
+    if (sym != SEMI) x->o1 = expr();
+    else x->o1 = new_node(EMPTY);
     if (sym == SEMI) next_sym(); else syntax_error(2);
   }
 
@@ -332,9 +349,10 @@ node *statement()
       x->o1 = expr();
       if (sym == COLON) //Repere et test les labels
       {
-        if(labels[x->o1->val] == 1) syntax_error(5); //Verifie si un label est deja utiliser
-        x->kind = LABEL; labels[x->o1->val] = 1;
+        if(labels[x->o1->val] == -1) syntax_error(5); //Verifie si un label est deja utiliser
+        x->kind = LABEL; labels[x->o1->val] = -1;
         next_sym();
+        x->o2= statement();
       }
       else if (sym == SEMI) next_sym(); else syntax_error(2);
     }
@@ -361,8 +379,12 @@ enum { ILOAD, ISTORE, BIPUSH, DUP, POP, IADD, ISUB, IMULT,
 typedef signed char code;
 
 code object[1000], *here = object;
+code *branching[1000], next_label = 0;
+code *continu[250],  next_continu = 0; //il ne peut y avoir plus de boucle
+code *brk[250], next_brk = 0; //meme chose que les continue
 
 void gen(code c) {*here++ = c; if(here-object>1000) printf("Program overflow");} /* overflow? */
+void assignLoopExit(code *start, code *end); /*foward declaration*/
 
 #ifdef SHOW_CODE
 #define g(c) do { printf(" %d",c); gen(c); } while (0)
@@ -373,6 +395,7 @@ void gen(code c) {*here++ = c; if(here-object>1000) printf("Program overflow");}
 #endif
 
 void fix(code *src, code *dst) { *src = dst-src; } /* overflow? */
+
 
 void c(node *x)
 { switch (x->kind)
@@ -465,20 +488,51 @@ void c(node *x)
                      c(x->o1);
                      gi(IFEQ); p2 = here++;
                      c(x->o2);
-                     gi(GOTO); fix(here++,p1); fix(p2,here); break;
+                     gi(GOTO); fix(here++,p1); fix(p2,here);
+                     assignLoopExit(p1, here); break;
                    }
 
       case DO    : { code *p1 = here; c(x->o1);
                      c(x->o2);
-                     gi(IFNE); fix(here++,p1); break;
+                     gi(IFNE); fix(here++,p1);
+                     assignLoopExit(p1, here); break;
                    }
 
-      case GOTON : {
+      case CONT  : {
                     gi(GOTO);
+                    if (x->o1->kind == EMPTY)
+                    {
+                      continu[next_continu] = here++;
+                      *continu[next_continu++] = 27;
+                    }
+                    else
+                    {
+                     continu[next_continu] = here++;
+                     *continu[next_continu++] = x->o1->val;
+                    }
+                   }
+
+      case BREAK : {
+                    gi(GOTO);
+                    if (x->o1->kind == EMPTY)
+                    {
+                      brk[next_brk] = here++;
+                      *brk[next_brk++] = 27;
+                    }
+                    else
+                    {
+                      brk[next_brk] = here++;
+                      *brk[next_brk++] = x->o1->val;
+                    }
+                   }
+      case GOTON : {
+                    gi(GOTO); branching[next_label] = here++;
+                    *branching[next_label++] = x->o1->val; break;
                    }
 
       case LABEL : {
-                     labels[x->o1->val] = here-object; break;
+                     labels[x->o1->val] = here-object;
+                     c(x->o2); break;
                    }
 
       case EMPTY : break;
@@ -494,8 +548,70 @@ void c(node *x)
       case PROG  : c(x->o1);
                    gi(RETURN); break;
     }
+
+}
+/*Assingning the jump to goto, break and continue statement*/
+void assignlabel()
+{
+  for(int i=0; i<next_label; i++)
+    {
+      *branching[i] = (object + labels[*branching[i]]) - branching[i];
+    }
 }
 
+void assignLoopExit(code *start, code *end)
+{
+  //Verifie si la boucle est etiquetter par un id
+  int nameofloop = start - object;
+  printf("assign loop starting for loop at %d \n", nameofloop);
+  int names[26]; int num_name = 0;
+  //trouve les noms de la boucle
+  for(int i=0; i<26; i++) if(labels[i] == nameofloop) names[num_name++] = i;
+  printf("names of the loop %d \n", names[0]);
+  //regarde si il y a des break a updater pour la loop
+  for(int i=0; i<next_brk; i++)
+  {
+    if(brk[i] == NULL) continue;
+    //cas ou il n'y a pas de label
+    if(*brk[i] == 27)
+    {
+      fix(brk[i],end);
+      brk[i] = NULL;
+    }
+    //cas avec label
+    else
+      for(int j=0; j<num_name; j++)
+      {
+        if(*brk[i] == names[j])
+        {
+          fix(brk[i],end);
+          brk[i] = NULL;
+        }
+      }
+  }
+
+  //Meme traitement pour les enoncers continues
+  for(int i=0; i<next_continu; i++)
+  {
+    if(continu[i] == NULL) continue;
+    //cas ou il n'y a pas de label
+    if(*continu[i] == 27)
+    {
+      fix(continu[i], start);
+      continu[i] = NULL;
+    }
+    //cas ou il y a un label
+    else
+      for(int j=0; j<num_name; j++)
+      {
+        if(*continu[i] == names[j])
+        {
+          fix(continu[i], start);
+          continu[i] = NULL;
+        }
+      }
+  }
+}
 /*---------------------------------------------------------------------------*/
 
 /* Machine virtuelle. */
@@ -540,9 +656,10 @@ int main()
   int i;
 
   for (i=0; i<26; i++) //Initialise les valeurs des labels a zero
-    labels[i] = 0;
+    labels[i] = -2;
 
   c(program());
+  assignlabel();
 
 #ifdef SHOW_CODE
   printf("\n");
