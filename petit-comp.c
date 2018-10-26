@@ -382,6 +382,7 @@ code object[1000], *here = object;
 code *branching[1000], next_label = 0;
 code *continu[250],  next_continu = 0; //il ne peut y avoir plus de boucle
 code *brk[250], next_brk = 0; //meme chose que les continue
+int current_loop = 27;
 
 void gen(code c) {*here++ = c; if(here-object>1000) printf("Program overflow");} /* overflow? */
 void assignLoopExit(code *start, code *end); /*foward declaration*/
@@ -484,18 +485,18 @@ void c(node *x)
                      c(x->o3); fix(p2,here); break;
                    }
 
-      case WHILE : { code *p1 = here, *p2;
+      case WHILE : { code *p1 = here, *p2; current_loop++;
                      c(x->o1);
                      gi(IFEQ); p2 = here++;
                      c(x->o2);
                      gi(GOTO); fix(here++,p1); fix(p2,here);
-                     assignLoopExit(p1, here); break;
+                     assignLoopExit(p1, here); current_loop--; break;
                    }
 
-      case DO    : { code *p1 = here; c(x->o1);
+      case DO    : { code *p1 = here; current_loop++; c(x->o1);
                      c(x->o2);
                      gi(IFNE); fix(here++,p1);
-                     assignLoopExit(p1, here); break;
+                     assignLoopExit(p1, here); current_loop--; break;
                    }
 
       case CONT  : {
@@ -503,7 +504,7 @@ void c(node *x)
                     if (x->o1->kind == EMPTY)
                     {
                       continu[next_continu] = here++;
-                      *continu[next_continu++] = 27;
+                      *continu[next_continu++] = current_loop;
                     }
                     else
                     {
@@ -517,7 +518,7 @@ void c(node *x)
                     if (x->o1->kind == EMPTY)
                     {
                       brk[next_brk] = here++;
-                      *brk[next_brk++] = 27;
+                      *brk[next_brk++] = current_loop;
                     }
                     else
                     {
@@ -563,17 +564,15 @@ void assignLoopExit(code *start, code *end)
 {
   //Verifie si la boucle est etiquetter par un id
   int nameofloop = start - object;
-  printf("assign loop starting for loop at %d \n", nameofloop);
   int names[26]; int num_name = 0;
   //trouve les noms de la boucle
   for(int i=0; i<26; i++) if(labels[i] == nameofloop) names[num_name++] = i;
-  printf("names of the loop %d \n", names[0]);
   //regarde si il y a des break a updater pour la loop
   for(int i=0; i<next_brk; i++)
   {
     if(brk[i] == NULL) continue;
     //cas ou il n'y a pas de label
-    if(*brk[i] == 27)
+    if(*brk[i] == current_loop)
     {
       fix(brk[i],end);
       brk[i] = NULL;
@@ -595,7 +594,7 @@ void assignLoopExit(code *start, code *end)
   {
     if(continu[i] == NULL) continue;
     //cas ou il n'y a pas de label
-    if(*continu[i] == 27)
+    if(*continu[i] == current_loop)
     {
       fix(continu[i], start);
       continu[i] = NULL;
