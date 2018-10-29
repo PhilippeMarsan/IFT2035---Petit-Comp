@@ -22,7 +22,6 @@ int ch = ' ';
 int sym;
 int int_val;
 char id_name[100];
-char labels[100];
 
 void syntax_error(int cas)
 {
@@ -35,6 +34,8 @@ void syntax_error(int cas)
   case 5: printf("Invalid label name on line %d \n", l_num);break;
   case 6: printf("Expecting a paranthese on line %d\n", l_num);break;
   case 7: printf("Expecting a first paranthese on line %d\n", l_num);break;
+  case 8: printf("Label already assigned\n"); break;
+  case 9: printf("Jump to undeclared label\n"); break;
   default:printf("syntax error on line %d\n", l_num);
   }
   exit(1); }
@@ -349,8 +350,7 @@ node *statement()
       x->o1 = expr();
       if (sym == COLON) //Repere et test les labels
       {
-        if(labels[x->o1->val] == -1) syntax_error(5); //Verifie si un label est deja utiliser
-        x->kind = LABEL; labels[x->o1->val] = -1;
+        x->kind = LABEL;
         next_sym();
         x->o2= statement();
       }
@@ -379,7 +379,8 @@ enum { ILOAD, ISTORE, BIPUSH, DUP, POP, IADD, ISUB, IMULT,
 typedef signed char code;
 
 code object[1000], *here = object;
-code *branching[1000], next_label = 0;
+code *jump[1000], next_jump = 0;
+code *labels[27];
 code *continu[250],  next_continu = 0; //il ne peut y avoir plus de boucle
 code *brk[250], next_brk = 0; //meme chose que les continue
 int current_loop = 27;
@@ -511,6 +512,7 @@ void c(node *x)
                      continu[next_continu] = here++;
                      *continu[next_continu++] = x->o1->val;
                     }
+                    break;
                    }
 
       case BREAK : {
@@ -525,14 +527,16 @@ void c(node *x)
                       brk[next_brk] = here++;
                       *brk[next_brk++] = x->o1->val;
                     }
+                    break;
                    }
       case GOTON : {
-                    gi(GOTO); branching[next_label] = here++;
-                    *branching[next_label++] = x->o1->val; break;
+                    gi(GOTO); jump[next_jump] = here++;
+                    *jump[next_jump++] = x->o1->val; break;
                    }
 
       case LABEL : {
-                     labels[x->o1->val] = here-object;
+                     if(labels[x->o1->val] != NULL) syntax_error(8);
+                     labels[x->o1->val] = here;
                      c(x->o2); break;
                    }
 
@@ -554,19 +558,21 @@ void c(node *x)
 /*Assingning the jump to goto, break and continue statement*/
 void assignlabel()
 {
-  for(int i=0; i<next_label; i++)
+  for(int i=0; i<next_jump; i++)
     {
-      *branching[i] = (object + labels[*branching[i]]) - branching[i];
+      if (labels[*jump[i]] == NULL) syntax_error(9); //le label n'existe pas
+      else fix(jump[i], labels[*jump[i]]);
     }
 }
 
 void assignLoopExit(code *start, code *end)
 {
   //Verifie si la boucle est etiquetter par un id
-  int nameofloop = start - object;
+  code  *nameofloop = start;
   int names[26]; int num_name = 0;
   //trouve les noms de la boucle
   for(int i=0; i<26; i++) if(labels[i] == nameofloop) names[num_name++] = i;
+
   //regarde si il y a des break a updater pour la loop
   for(int i=0; i<next_brk; i++)
   {
@@ -654,8 +660,8 @@ int main()
 {
   int i;
 
-  for (i=0; i<26; i++) //Initialise les valeurs des labels a zero
-    labels[i] = -2;
+  for (i=0; i<26; i++) //Initialise les valeurs des labels
+    labels[i] = NULL;
 
   c(program());
   assignlabel();
