@@ -36,6 +36,9 @@ void syntax_error(int cas)
   case 7: printf("Expecting a first paranthese on line %d\n", l_num);break;
   case 8: printf("Label already assigned\n"); break;
   case 9: printf("Jump to undeclared label\n"); break;
+  case 10:printf("Jump to label too large to index\n"); break;
+  case 11:printf("Continue or break not nested in loop\n"); break;
+  case 12:printf("Continue or break  with ID not in a nesting loop \n"); break;
   default:printf("syntax error on line %d\n", l_num);
   }
   exit(1); }
@@ -396,7 +399,11 @@ void assignLoopExit(code *start, code *end); /*foward declaration*/
 #define gi(c) gen(c)
 #endif
 
-void fix(code *src, code *dst) { *src = dst-src; } /* overflow? */
+void fix(code *src, code *dst)
+{
+  *src = dst-src;
+  //if(!(*src>=128 && *src<=127)) syntax_error(10);
+} /* overflow? */
 
 
 void c(node *x)
@@ -535,7 +542,7 @@ void c(node *x)
                    }
 
       case LABEL : {
-                     if(labels[x->o1->val] != NULL) syntax_error(8);
+                     if(labels[x->o1->val] != NULL) syntax_error(8); //le labe l a deja ete utilise
                      labels[x->o1->val] = here;
                      c(x->o2); break;
                    }
@@ -576,6 +583,7 @@ void assignLoopExit(code *start, code *end)
   //regarde si il y a des break a updater pour la loop
   for(int i=0; i<next_brk; i++)
   {
+    if(*brk[i] == 27) syntax_error(11); //cas ou break est endehors d'une boucle
     if(brk[i] == NULL) continue;
     //cas ou il n'y a pas de label
     if(*brk[i] == current_loop)
@@ -598,6 +606,7 @@ void assignLoopExit(code *start, code *end)
   //Meme traitement pour les enoncers continues
   for(int i=0; i<next_continu; i++)
   {
+    if(*continu[i] == 27) syntax_error(11); //cas ou continu est endehors d'une boucle
     if(continu[i] == NULL) continue;
     //cas ou il n'y a pas de label
     if(*continu[i] == current_loop)
@@ -616,6 +625,16 @@ void assignLoopExit(code *start, code *end)
         }
       }
   }
+  if(current_loop == 28) // verfifie que tout les continue et break on ete assigne
+  {
+    int stop = next_brk > next_continu ? next_brk : next_continu;
+    for (int i=0, j=0; i<stop; i++, j++)
+    {
+      if(brk[i] != NULL && i < next_brk) syntax_error(12);
+      if(continu[j] != NULL && j < next_continu) syntax_error(12);
+    }
+  }
+
 }
 /*---------------------------------------------------------------------------*/
 
