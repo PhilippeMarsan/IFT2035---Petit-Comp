@@ -518,6 +518,7 @@ void c(node *x)
                    }
 
       case CONT  : {
+                    if(current_loop == 27) compilation_error(4);
                     gi(GOTO);
                     if (x->o1->kind == EMPTY)
                     {
@@ -533,6 +534,7 @@ void c(node *x)
                    }
 
       case BREAK : {
+                    if(current_loop == 27) compilation_error(4);
                     gi(GOTO);
                     if (x->o1->kind == EMPTY)
                     {
@@ -614,7 +616,6 @@ void breaksAndContinues(code *jump, int next_stop, code *operator[])
 	//Verifie les operandes a updater dans les loops
 	for(int i=0; i<next_stop; i++)
 	{
-		if(*operator[i] == 27) compilation_error(4); //cas ou operande hors d'une boucle
 		if(operator[i] == NULL) continue;
 		//cas ou il n'y a pas d'etiquettes
 		if(*operator[i] == current_loop)
