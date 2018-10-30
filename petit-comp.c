@@ -659,11 +659,10 @@ void assignLoopExit(code *start, code *end)
     }
   }
 }
-
-code *operator = NULL;
-
+ 
 void breaksAndContinues(code *jump, int opcode)
 {
+	code *operator = NULL;
 	int next_stop = 0;
 
 	//Verifie le type de l'operande a verifier (break ou continue)
