@@ -386,10 +386,25 @@ code *jump[1000], next_jump = 0;
 code *labels[27];
 code *continu[250],  next_continu = 0; //il ne peut y avoir plus de boucle
 code *brk[250], next_brk = 0; //meme chose que les continue
+int names[26]; int num_name = 0; //utile pour la verification des loops
 int current_loop = 27;
 
-void gen(code c) {*here++ = c; if(here-object>1000) printf("Program overflow");} /* overflow? */
+void gen(code c) {*here++ = c; if(here-object>1000) printf("Program overflow");} //checks for overflow overflow
 void assignLoopExit(code *start, code *end); /*foward declaration*/
+void breaksAndContinues(code *jump, int opcode); /*Forward Declaration */
+
+void compilation_error(int code)
+{
+  switch (code)
+  {
+  case 1: printf("Label already assigned twice\n"); break;
+  case 2: printf("Jump to undeclared label\n"); break;
+  case 3: printf("Jump to label too large to index\n"); break;
+  case 4: printf("Continue or break not nested in loop\n"); break;
+  case 5: printf("Continue or break  with ID not in a nesting loop \n"); break;
+  }
+  exit(1); 
+}
 
 #ifdef SHOW_CODE
 #define g(c) do { printf(" %d",c); gen(c); } while (0)
@@ -402,7 +417,7 @@ void assignLoopExit(code *start, code *end); /*foward declaration*/
 void fix(code *src, code *dst)
 {
   *src = dst-src;
-  //if(!(*src>=128 && *src<=127)) syntax_error(10);
+  //if(!(*src>=128 && *src<=127)) compilation_error(3);
 } /* overflow? */
 
 
@@ -542,7 +557,7 @@ void c(node *x)
                    }
 
       case LABEL : {
-                     if(labels[x->o1->val] != NULL) syntax_error(8); //le labe l a deja ete utilise
+                     if(labels[x->o1->val] != NULL) compilation_error(1); //le label a deja ete utilise
                      labels[x->o1->val] = here;
                      c(x->o2); break;
                    }
@@ -567,74 +582,126 @@ void assignlabel()
 {
   for(int i=0; i<next_jump; i++)
     {
-      if (labels[*jump[i]] == NULL) syntax_error(9); //le label n'existe pas
+      if (labels[*jump[i]] == NULL) compilation_error(2); //le label n'existe pas
       else fix(jump[i], labels[*jump[i]]);
     }
 }
 
+/* Verifie si la boucle est etiquetter par un id */
+void loopVerifications(code *start)
+{
+	code *nameofloop = start;
+	for(int i=0; i<26; i++) if(labels[i] == nameofloop) names[num_name++] == i;
+}
+
 void assignLoopExit(code *start, code *end)
 {
-  //Verifie si la boucle est etiquetter par un id
-  code  *nameofloop = start;
-  int names[26]; int num_name = 0;
-  //trouve les noms de la boucle
-  for(int i=0; i<26; i++) if(labels[i] == nameofloop) names[num_name++] = i;
+  //Verifie les loops
+  loopVerifications(*start);
+
+  //Update les breaks dans les boucles
+  breaksAndContinues(*end, 0);
+  //Update les continues dans les boucles
+  breaksAndContinues(*start, 1);
 
   //regarde si il y a des break a updater pour la loop
-  for(int i=0; i<next_brk; i++)
-  {
-    if(*brk[i] == 27) syntax_error(11); //cas ou break est endehors d'une boucle
-    if(brk[i] == NULL) continue;
-    //cas ou il n'y a pas de label
-    if(*brk[i] == current_loop)
-    {
-      fix(brk[i],end);
-      brk[i] = NULL;
-    }
-    //cas avec label
-    else
-      for(int j=0; j<num_name; j++)
-      {
-        if(*brk[i] == names[j])
-        {
-          fix(brk[i],end);
-          brk[i] = NULL;
-        }
-      }
-  }
+  // for(int i=0; i<next_brk; i++)
+  // {
+  //   if(*brk[i] == 27) compilation_error(4); //cas ou break est endehors d'une boucle
+  //   if(brk[i] == NULL) continue;
+  //   //cas ou il n'y a pas de label
+  //   if(*brk[i] == current_loop)
+  //   {
+  //     fix(brk[i],end);
+  //     brk[i] = NULL;
+  //   }
+  //   //cas avec label
+  //   else
+  //     for(int j=0; j<num_name; j++)
+  //     {
+  //       if(*brk[i] == names[j])
+  //       {
+  //         fix(brk[i],end);
+  //         brk[i] = NULL;
+  //       }
+  //     }
+  // }
 
-  //Meme traitement pour les enoncers continues
-  for(int i=0; i<next_continu; i++)
-  {
-    if(*continu[i] == 27) syntax_error(11); //cas ou continu est endehors d'une boucle
-    if(continu[i] == NULL) continue;
-    //cas ou il n'y a pas de label
-    if(*continu[i] == current_loop)
-    {
-      fix(continu[i], start);
-      continu[i] = NULL;
-    }
-    //cas ou il y a un label
-    else
-      for(int j=0; j<num_name; j++)
-      {
-        if(*continu[i] == names[j])
-        {
-          fix(continu[i], start);
-          continu[i] = NULL;
-        }
-      }
-  }
-  if(current_loop == 28) // verfifie que tout les continue et break on ete assigne
+  // //Meme traitement pour les enoncers continues
+  // for(int i=0; i<next_continu; i++)
+  // {
+  //   if(*continu[i] == 27) compilation_error(4); //cas ou continu est endehors d'une boucle
+  //   if(continu[i] == NULL) continue;
+  //   //cas ou il n'y a pas de label
+  //   if(*continu[i] == current_loop)
+  //   {
+  //     fix(continu[i], start);
+  //     continu[i] = NULL;
+  //   }
+  //   //cas ou il y a un label
+  //   else
+  //     for(int j=0; j<num_name; j++)
+  //     {
+  //       if(*continu[i] == names[j])
+  //       {
+  //         fix(continu[i], start);
+  //         continu[i] = NULL;
+  //       }
+  //     }
+  // }
+  if(current_loop == 28) // verifie que tout les continue et break on ete assigne
   {
     int stop = next_brk > next_continu ? next_brk : next_continu;
     for (int i=0, j=0; i<stop; i++, j++)
     {
-      if(brk[i] != NULL && i < next_brk) syntax_error(12);
-      if(continu[j] != NULL && j < next_continu) syntax_error(12);
+      if(brk[i] != NULL && i < next_brk) compilation_error(5);
+      if(continu[j] != NULL && j < next_continu) compilation_error(5);
     }
   }
+}
 
+code *operator = NULL;
+
+void breaksAndContinues(code *jump, int opcode)
+{
+	int next_stop = 0;
+
+	//Verifie le type de l'operande a verifier (break ou continue)
+	if(opcode < 1)
+	{
+		operator = *brk;
+		next_stop = next_brk;
+	}
+	else
+	{
+		operator = *continu;
+		next_stop = next_continu;
+
+	}
+	//Verifie les operandes a updater dans les loops
+	for(int i=0; i<next_stop; i++)
+	{
+		if(operator[i] == 27) compilation_error(4); //cas ou operande hors d'une boucle
+		if(operator[i] == NULL) continue;
+		//cas ou il n'y a pas d'etiquettes
+		if(operator[i] == current_loop)
+		{
+			fix(operator[i],jump);
+			operator[i] = NULL;
+		}
+		//cas ou il y a une etiquette
+		else
+		{
+			for (int j = 0; j<num_name; j++)
+			{
+				if(operator[i] == names[j])
+				{
+					fix(operator[i],jump);
+					operator[i] = NULL;
+				}
+			}
+		}
+	}
 }
 /*---------------------------------------------------------------------------*/
 
