@@ -29,11 +29,13 @@ void syntax_error(int cas)
   {
   case 1: printf("Problem with end of file on line %d \n", l_num); break;
   case 2: printf("Syntax Error: Missing a ';' on line %d \n", l_num); break;
-  case 3: printf("Problem in syntax analysis on end of line %d \n", l_num); break; //to fix
-  case 4: printf("Syntax Error: Character not a letter or number on line %d\n", l_num); break;
+  case 3: printf("Syntax Error: Unknown instruction on line %d \n", l_num); break; //to fix
+  case 4: printf("Syntax Error: Unrecognizable character on line %d\n", l_num); break;
   case 5: printf("Syntax Error: Invalid label name on line %d \n", l_num);break;
   case 6: printf("Syntax Error: Expecting a paranthese ')' on line %d\n", l_num);break;
   case 7: printf("Syntax Error: Expecting a paranthese '(' on line %d\n", l_num);break;
+  case 8: printf("Syntax Error: instruction or id name on line %d is too long\n", l_num);break;
+  case 9: printf("Syntax Error: Number out of the range[-128,127] can't be assigned at the start of the program see line %d\n", l_num);break;
   default:printf("Syntax Error on line %d\n", l_num);
   }
   exit(1); }
@@ -63,11 +65,12 @@ void next_sym()
       default:
         if (ch >= '0' && ch <= '9')
           {
-            int_val = 0; /* overflow? */
+            int_val = 0; /* la valeur doit etre comprise entre -128 et 127*/
 
             while (ch >= '0' && ch <= '9')
               {
                 int_val = int_val*10 + (ch - '0');
+                if (!(int_val > (-128) && int_val < 127)) syntax_error(9);
                 next_ch();
               }
 
@@ -75,11 +78,12 @@ void next_sym()
           }
         else if (ch >= 'a' && ch <= 'z')
           {
-            int i = 0; /* overflow? */
+            int i = 0; /* un nom peu avoir au maximum 100 ch*/
 
             while ((ch >= 'a' && ch <= 'z') || ch == '_')
               {
                 id_name[i++] = ch;
+                if(i > 99) syntax_error(8);
                 next_ch();
               }
 
@@ -370,24 +374,6 @@ node *program()  /* <program> ::= <stat> */
 /*---------------------------------------------------------------------------*/
 
 /* Generateur de code. */
-
-enum { ILOAD, ISTORE, BIPUSH, DUP, POP, IADD, ISUB, IMULT,
-       IMOD, IDIV, GOTO, IFEQ, IFNE, IFLT, RETURN, IPRINT };
-
-typedef signed char code;
-
-code object[1000], *here = object;
-code *jump[1000], next_jump = 0;
-code *labels[27];
-code *continu[250],  next_continu = 0; //il ne peut y avoir plus de boucle
-code *brk[250], next_brk = 0; //meme chose que les continue
-int names[26]; int num_name = 0; //utile pour la verification des loops
-int current_loop = 27;
-
-void gen(code c) {*here++ = c; if(here-object>1000) printf("Program overflow");} //checks for overflow overflow
-void assignLoopExit(code *start, code *end); /*foward declaration*/
-void breaksAndContinues(code *jump, int next_stop, code *operator[]); /*Forward Declaration */
-
 void compilation_error(int code)
 {
   switch (code)
@@ -397,9 +383,27 @@ void compilation_error(int code)
   case 3: printf("Compilation Error: Jump to label out of bounds\n"); break;
   case 4: printf("Compilation Error: Continue or break not nested in loop\n"); break;
   case 5: printf("Compilation Error: Continue or break with ID not in a nesting loop \n"); break;
+  case 6: printf("Compilation Error: Plus de place pour du code\n"); break;
   }
   exit(1);
 }
+
+enum { ILOAD, ISTORE, BIPUSH, DUP, POP, IADD, ISUB, IMULT,
+       IMOD, IDIV, GOTO, IFEQ, IFNE, IFLT, RETURN, IPRINT };
+
+typedef signed char code;
+
+code object[1000], *here = object;
+code *jump[1000], next_jump = 0;
+code *labels[26];
+code *continu[250],  next_continu = 0; //il ne peut y avoir plus de boucle
+code *brk[250], next_brk = 0; //meme chose que les continue
+int names[26]; int num_name = 0; //utile pour la verification des loops
+int current_loop = 27;
+
+void gen(code c) {*here++ = c; if(here-object>1000) compilation_error(6);} //checks for overflow overflow
+void assignLoopExit(code *start, code *end); /*foward declaration*/
+void breaksAndContinues(code *jump, int next_stop, code *operator[]); /*Forward Declaration */
 
 #ifdef SHOW_CODE
 #define g(c) do { printf(" %d",c); gen(c); } while (0)
@@ -411,9 +415,10 @@ void compilation_error(int code)
 
 void fix(code *src, code *dst)
 {
-  *src = dst-src;
-  //if(!(*src>=128 && *src<=127)) compilation_error(3);
-} /* overflow? */
+  int jump = dst-src;
+  if(!(jump > (-128) && jump < 127)) compilation_error(3); //Test pour saut trop grand
+  *src = jump;
+}
 
 
 void c(node *x)
@@ -584,21 +589,20 @@ void assignlabel()
     }
 }
 
-/* Verifie si la boucle est etiquetter par un id */
-void loopVerifications(code *start)
-{
-	code *nameofloop = start;
-	for(int i=0; i<26; i++) if(labels[i] == nameofloop) names[num_name++] = i;
-}
 
 void assignLoopExit(code *start, code *end)
 {
-  //Verifie les loops
-  loopVerifications(start);
-  //Update les breaks dans les boucles
+  /*Donne les etiquettes assigne a une loop*/
+  num_name = 0;
+  code *nameofloop = start;
+  for(int i=0; i<26; i++) if(labels[i] == nameofloop) names[num_name++] = i;
+
+  //Update les break
   breaksAndContinues(end, next_brk, brk);
+
   //Update les continues dans les boucles
   breaksAndContinues(start, next_continu, continu);
+
   // verifie que tout les continue et break on ete assigne a la fin de la boucle la plus englobante
   if(current_loop == 28)
   {
@@ -627,13 +631,12 @@ void breaksAndContinues(code *jump, int next_stop, code *operator[])
 		else
 		{
 			for (int j = 0; j<num_name; j++)
-			{
 				if(*operator[i] == names[j])
 				{
 					fix(operator[i],jump);
 					operator[i] = NULL;
+          break;
 				}
-			}
 		}
 	}
 }
@@ -695,9 +698,9 @@ int main()
 
   run();
 
-  for (i=0; i<26; i++)
-    if (globals[i] != 0)
-      printf("%c = %d\n", 'a'+i, globals[i]);
+  // for (i=0; i<26; i++)
+  //   if (globals[i] != 0)
+  //     printf("%c = %d\n", 'a'+i, globals[i]);
 
   return 0;
 }
