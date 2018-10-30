@@ -28,18 +28,13 @@ void syntax_error(int cas)
   switch (cas)
   {
   case 1: printf("Problem with end of file on line %d \n", l_num); break;
-  case 2: printf("Problem with reading expression aka missing a ';' on line %d \n", l_num); break;
-  case 3: printf("Problem in syntax analysis on line %d \n", l_num); break;
-  case 4: printf("Problem in syntax analysis not a letter or number on line %d\n", l_num); break;
-  case 5: printf("Invalid label name on line %d \n", l_num);break;
-  case 6: printf("Expecting a paranthese on line %d\n", l_num);break;
-  case 7: printf("Expecting a first paranthese on line %d\n", l_num);break;
-  case 8: printf("Label already assigned\n"); break;
-  case 9: printf("Jump to undeclared label\n"); break;
-  case 10:printf("Jump to label too large to index\n"); break;
-  case 11:printf("Continue or break not nested in loop\n"); break;
-  case 12:printf("Continue or break  with ID not in a nesting loop \n"); break;
-  default:printf("syntax error on line %d\n", l_num);
+  case 2: printf("Syntax Error: Missing a ';' on line %d \n", l_num); break;
+  case 3: printf("Problem in syntax analysis on end of line %d \n", l_num); break; //to fix
+  case 4: printf("Syntax Error: Character not a letter or number on line %d\n", l_num); break;
+  case 5: printf("Syntax Error: Invalid label name on line %d \n", l_num);break;
+  case 6: printf("Syntax Error: Expecting a paranthese ')' on line %d\n", l_num);break;
+  case 7: printf("Syntax Error: Expecting a paranthese '(' on line %d\n", l_num);break;
+  default:printf("Syntax Error on line %d\n", l_num);
   }
   exit(1); }
 
@@ -347,7 +342,7 @@ node *statement()
     if (sym == SEMI) next_sym(); else syntax_error(2);
   }
 
-  else                     /* <expr> ";" */
+  else  /* <expr> ";" */
     {
       x = new_node(EXPR);
       x->o1 = expr();
@@ -397,11 +392,11 @@ void compilation_error(int code)
 {
   switch (code)
   {
-  case 1: printf("Label already assigned twice\n"); break;
-  case 2: printf("Jump to undeclared label\n"); break;
-  case 3: printf("Jump to label too large to index\n"); break;
-  case 4: printf("Continue or break not nested in loop\n"); break;
-  case 5: printf("Continue or break  with ID not in a nesting loop \n"); break;
+  case 1: printf("Compilation Error: Label already assigned twice\n"); break;
+  case 2: printf("Compilation Error: Jump to undeclared label\n"); break;
+  case 3: printf("Compilation Error: Jump to label out of bounds\n"); break;
+  case 4: printf("Compilation Error: Continue or break not nested in loop\n"); break;
+  case 5: printf("Compilation Error: Continue or break with ID not in a nesting loop \n"); break;
   }
   exit(1);
 }
@@ -613,7 +608,7 @@ void assignLoopExit(code *start, code *end)
     }
   }
 }
-
+/*Methode qui s'occupe d'updater les breaks et les continues vers leurs boucles */
 void breaksAndContinues(code *jump, int next_stop, code *operator[])
 {
 	//Verifie les operandes a updater dans les loops

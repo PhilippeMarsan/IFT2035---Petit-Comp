@@ -4,8 +4,8 @@ a: c:
 while (a<10)
   if (a>5)
     {
-	continue c;
     a = (a*5);
+	continue c;
     }
   else {
     a = a+3;
