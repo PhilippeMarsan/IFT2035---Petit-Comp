@@ -391,7 +391,7 @@ int current_loop = 27;
 
 void gen(code c) {*here++ = c; if(here-object>1000) printf("Program overflow");} //checks for overflow overflow
 void assignLoopExit(code *start, code *end); /*foward declaration*/
-void breaksAndContinues(code *jump, int opcode); /*Forward Declaration */
+void breaksAndContinues(code *jump, int next_stop, code *operator[]); /*Forward Declaration */
 
 void compilation_error(int code)
 {
@@ -403,7 +403,7 @@ void compilation_error(int code)
   case 4: printf("Continue or break not nested in loop\n"); break;
   case 5: printf("Continue or break  with ID not in a nesting loop \n"); break;
   }
-  exit(1); 
+  exit(1);
 }
 
 #ifdef SHOW_CODE
@@ -591,65 +591,19 @@ void assignlabel()
 void loopVerifications(code *start)
 {
 	code *nameofloop = start;
-	for(int i=0; i<26; i++) if(labels[i] == nameofloop) names[num_name++] == i;
+	for(int i=0; i<26; i++) if(labels[i] == nameofloop) names[num_name++] = i;
 }
 
 void assignLoopExit(code *start, code *end)
 {
   //Verifie les loops
-  loopVerifications(*start);
-
+  loopVerifications(start);
   //Update les breaks dans les boucles
-  breaksAndContinues(*end, 0);
+  breaksAndContinues(end, next_brk, brk);
   //Update les continues dans les boucles
-  breaksAndContinues(*start, 1);
-
-  //regarde si il y a des break a updater pour la loop
-  // for(int i=0; i<next_brk; i++)
-  // {
-  //   if(*brk[i] == 27) compilation_error(4); //cas ou break est endehors d'une boucle
-  //   if(brk[i] == NULL) continue;
-  //   //cas ou il n'y a pas de label
-  //   if(*brk[i] == current_loop)
-  //   {
-  //     fix(brk[i],end);
-  //     brk[i] = NULL;
-  //   }
-  //   //cas avec label
-  //   else
-  //     for(int j=0; j<num_name; j++)
-  //     {
-  //       if(*brk[i] == names[j])
-  //       {
-  //         fix(brk[i],end);
-  //         brk[i] = NULL;
-  //       }
-  //     }
-  // }
-
-  // //Meme traitement pour les enoncers continues
-  // for(int i=0; i<next_continu; i++)
-  // {
-  //   if(*continu[i] == 27) compilation_error(4); //cas ou continu est endehors d'une boucle
-  //   if(continu[i] == NULL) continue;
-  //   //cas ou il n'y a pas de label
-  //   if(*continu[i] == current_loop)
-  //   {
-  //     fix(continu[i], start);
-  //     continu[i] = NULL;
-  //   }
-  //   //cas ou il y a un label
-  //   else
-  //     for(int j=0; j<num_name; j++)
-  //     {
-  //       if(*continu[i] == names[j])
-  //       {
-  //         fix(continu[i], start);
-  //         continu[i] = NULL;
-  //       }
-  //     }
-  // }
-  if(current_loop == 28) // verifie que tout les continue et break on ete assigne
+  breaksAndContinues(start, next_continu, continu);
+  // verifie que tout les continue et break on ete assigne a la fin de la boucle la plus englobante
+  if(current_loop == 28)
   {
     int stop = next_brk > next_continu ? next_brk : next_continu;
     for (int i=0, j=0; i<stop; i++, j++)
@@ -659,31 +613,16 @@ void assignLoopExit(code *start, code *end)
     }
   }
 }
- 
-void breaksAndContinues(code *jump, int opcode)
+
+void breaksAndContinues(code *jump, int next_stop, code *operator[])
 {
-	code *operator = NULL;
-	int next_stop = 0;
-
-	//Verifie le type de l'operande a verifier (break ou continue)
-	if(opcode < 1)
-	{
-		operator = *brk;
-		next_stop = next_brk;
-	}
-	else
-	{
-		operator = *continu;
-		next_stop = next_continu;
-
-	}
 	//Verifie les operandes a updater dans les loops
 	for(int i=0; i<next_stop; i++)
 	{
-		if(operator[i] == 27) compilation_error(4); //cas ou operande hors d'une boucle
+		if(*operator[i] == 27) compilation_error(4); //cas ou operande hors d'une boucle
 		if(operator[i] == NULL) continue;
 		//cas ou il n'y a pas d'etiquettes
-		if(operator[i] == current_loop)
+		if(*operator[i] == current_loop)
 		{
 			fix(operator[i],jump);
 			operator[i] = NULL;
@@ -693,7 +632,7 @@ void breaksAndContinues(code *jump, int opcode)
 		{
 			for (int j = 0; j<num_name; j++)
 			{
-				if(operator[i] == names[j])
+				if(*operator[i] == names[j])
 				{
 					fix(operator[i],jump);
 					operator[i] = NULL;
