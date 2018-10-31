@@ -1,12 +1,31 @@
 #/!bin/bash
+clear
 
-gcc petit-comp.c -o petit-comp            #compilation du petit compilateur
+gcc petit-comp.c -o petit-comp        #compilation du petit compilateur,-DSHOW_CODE
 
 echo Test du premier Programme:
-./petit-comp < test.c                     #test du programmme donne en demo
+./petit-comp < test.c                 #test du programmme donne en demo
 
 echo Test des operateurs aditionels:
 ./petit-comp < Test_mult.c
 
-echo Test des operateur aditionel:
+echo Test des operateurs de test:
 ./petit-comp < test_t.c
+
+echo Test pour les labels:
+./petit-comp < test_label.c
+
+echo Test compilateur etendu:
+./petit-comp < test_enonce.c
+
+echo Test break et continue, erreur :
+./petit-comp < test_nesting.c
+
+echo Test saut trop grand, erreur :
+./petit-comp < test_overflow.c
+
+#echo Test avec valgrind:
+#valgrind --leak-check=yes ./petit-comp < /test_overflow.c
+
+
+tput sgr0
