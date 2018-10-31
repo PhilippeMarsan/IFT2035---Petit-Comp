@@ -41,6 +41,7 @@ void syntax_error(int cas)
   case 8:  printf("Syntax Error: instruction or id name on line %d is too long\n", l_num);break;
   case 9:  printf("Syntax Error: Number out of the range[-128,127] can't be assigned at the start of the program see line %d\n", l_num);break;
   case 10: printf("Syntax Error: Memory Overflow. Can't analyse code past this line %d\n", l_num); memory_dealloc(); exit(1);
+  case 11: printf("Syntax Error: Not a label following a break, continue or goto on line %d\n", l_num);break;
   default: printf("Syntax Error on line %d\n", l_num);
   }
   error = 1;
@@ -336,6 +337,7 @@ node *statement()
     x = new_node(GOTON);
     next_sym();
     x->o1 = expr();
+    if (x->o1->kind != VAR) syntax_error(11);
     if (sym == SEMI) next_sym(); else syntax_error(2);
   }
 
@@ -343,7 +345,11 @@ node *statement()
   {
     x = new_node(BREAK);
     next_sym();
-    if (sym != SEMI) x->o1 = expr();
+    if (sym != SEMI)
+    {
+      x->o1 = expr();
+      if (x->o1->kind != VAR) syntax_error(11);
+    }
     else x->o1 = new_node(EMPTY);
     if (sym == SEMI) next_sym(); else syntax_error(2);
   }
@@ -352,7 +358,11 @@ node *statement()
   {
     x = new_node(CONT);
     next_sym();
-    if (sym != SEMI) x->o1 = expr();
+    if (sym != SEMI)
+    {
+      x->o1 = expr();
+      if (x->o1->kind != VAR) syntax_error(11);
+    }
     else x->o1 = new_node(EMPTY);
     if (sym == SEMI) next_sym(); else syntax_error(2);
   }
@@ -363,6 +373,7 @@ node *statement()
       x->o1 = expr();
       if (sym == COLON) //Repere et test les labels
       {
+        if (x->o1->kind != VAR) syntax_error(5);
         x->kind = LABEL;
         next_sym();
         x->o2= statement();
@@ -408,10 +419,10 @@ enum { ILOAD, ISTORE, BIPUSH, DUP, POP, IADD, ISUB, IMULT,
 typedef signed char code;
 
 code object[1000], *here = object;
-code *jump[1000], next_jump = 0;
+code *jump[501], next_jump = 0;
 code *labels[26];
-code *continu[250],  next_continu = 0; //il ne peut y avoir plus de boucle
-code *brk[250], next_brk = 0; //meme chose que les continue
+code *continu[501],  next_continu = 0; //il ne peut y avoir plus de boucle
+code *brk[501], next_brk = 0; //meme chose que les continue
 int names[26]; int num_name = 0; //utile pour la verification des loops
 int current_loop = 27;
 
@@ -523,6 +534,7 @@ void c(node *x)
                    }
 
       case WHILE : { code *p1 = here, *p2; current_loop++;
+                     if(current_loop > 128) compilation_error(7); c(x->o1);
                      c(x->o1);
                      gi(IFEQ); p2 = here++;
                      c(x->o2);
@@ -530,7 +542,8 @@ void c(node *x)
                      assignLoopExit(p1, here); current_loop--; break;
                    }
 
-      case DO    : { code *p1 = here; current_loop++; if(current_loop > 128) compilation_error(7); c(x->o1);
+      case DO    : { code *p1 = here; current_loop++;
+                     if(current_loop > 128) compilation_error(7); c(x->o1);
                      c(x->o2);
                      gi(IFNE); fix(here++,p1);
                      assignLoopExit(p1, here); current_loop--; break;
@@ -657,12 +670,20 @@ void breaksAndContinues(code *jump, int next_stop, code *operator[])
 /*---------------------------------------------------------------------------*/
 
 /* Machine virtuelle. */
-
+void execution_error(int code)
+{
+  switch (code)
+  {
+  case 1: printf("Execution Error: Division or Modulo by zero\n"); break;
+  default: printf("Execution Error:\n");
+  }
+  memory_dealloc(); printf("-------End of Execution-------\n\n"); exit(1);
+}
 int globals[26];
 
 void run()
 {
-  int stack[1000], *sp = stack; /* overflow? */
+  int stack[1000], *sp = stack;
   code *pc = object;
 
   for (;;){
@@ -676,8 +697,10 @@ void run()
         case IADD  : sp[-2] = sp[-2] + sp[-1]; --sp;     break;
         case ISUB  : sp[-2] = sp[-2] - sp[-1]; --sp;     break;
         case IMULT : sp[-2] = sp[-2] * sp[-1]; --sp;     break;
-        case IMOD  : sp[-2] = sp[-2] % sp[-1]; --sp;     break;
-        case IDIV  : sp[-2] = sp[-2] / sp[-1]; --sp;     break;
+        case IMOD  : if(sp[-1] == 0) execution_error(1);
+                     sp[-2] = sp[-2] % sp[-1]; --sp;     break;
+        case IDIV  : if(sp[-1] == 0) execution_error(1);
+                     sp[-2] = sp[-2] / sp[-1]; --sp;     break;
         case GOTO  : pc += *pc;                          break;
         case IFEQ  : if (*--sp==0) pc += *pc; else pc++; break;
         case IFNE  : if (*--sp!=0) pc += *pc; else pc++; break;
@@ -685,6 +708,7 @@ void run()
         case IPRINT: printf("%d \n", sp[-1]); --sp;      break;
         case RETURN: return;
     }
+
     if(sp-stack > 1000)
     {
     	printf("Stack overflow\n");
@@ -714,6 +738,7 @@ void memory_deallocation(node *x)
 void memory_dealloc()
 {
 	memory_deallocation(root);
+  free(root);
 }
 
 int main()
@@ -726,15 +751,19 @@ int main()
   c(root);
   assignlabel();
 
+  printf("-------End of compilation-------\n\n");
+
 #ifdef SHOW_CODE
   printf("\n");
 #endif
 
-  for (i=0; i<26; i++)
+  for (i=0; i<26; i++) //Initialise les valeurs des variables global
     globals[i] = 0;
 
-  if(error == 0) run();
-  memory_deallocation(root);
+
+  if(error == 0) {run(); printf("-------End of Execution-------\n\n");}
+  memory_dealloc();
+
 
   // for (i=0; i<26; i++)
   //   if (globals[i] != 0)
