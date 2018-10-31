@@ -10,6 +10,10 @@
 
 /* Analyseur lexical. */
 
+void memory_dealloc(); //Forward declaration
+
+int error = 0; //Valide si le programme peut s'executer ou non
+
 int l_num = 1;  //compte la ligne du code analyser
 
 enum { DO_SYM, ELSE_SYM, IF_SYM, WHILE_SYM, PRINT_SYM, GOTO_SYM, BRK_SYM, CON_SYM, LBRA, RBRA, LPAR,
@@ -27,18 +31,20 @@ void syntax_error(int cas)
 {
   switch (cas)
   {
-  case 1: printf("Problem with end of file on line %d \n", l_num); break;
-  case 2: printf("Syntax Error: Missing a ';' on line %d \n", l_num); break;
-  case 3: printf("Syntax Error: Unknown instruction on line %d \n", l_num); break; //to fix
-  case 4: printf("Syntax Error: Unrecognizable character on line %d\n", l_num); break;
-  case 5: printf("Syntax Error: Invalid label name on line %d \n", l_num);break;
-  case 6: printf("Syntax Error: Expecting a paranthese ')' on line %d\n", l_num);break;
-  case 7: printf("Syntax Error: Expecting a paranthese '(' on line %d\n", l_num);break;
-  case 8: printf("Syntax Error: instruction or id name on line %d is too long\n", l_num);break;
-  case 9: printf("Syntax Error: Number out of the range[-128,127] can't be assigned at the start of the program see line %d\n", l_num);break;
-  default:printf("Syntax Error on line %d\n", l_num);
+  case 1:  printf("Problem with end of file on line %d \n", l_num); break;
+  case 2:  printf("Syntax Error: Missing a ';' on line %d \n", l_num); break;
+  case 3:  printf("Syntax Error: Unknown instruction on line %d \n", l_num); break;
+  case 4:  printf("Syntax Error: Unrecognizable character on line %d\n", l_num); break;
+  case 5:  printf("Syntax Error: Invalid label name on line %d \n", l_num);break;
+  case 6:  printf("Syntax Error: Expecting a paranthese ')' on line %d\n", l_num);break;
+  case 7:  printf("Syntax Error: Expecting a paranthese '(' on line %d\n", l_num);break;
+  case 8:  printf("Syntax Error: instruction or id name on line %d is too long\n", l_num);break;
+  case 9:  printf("Syntax Error: Number out of the range[-128,127] can't be assigned at the start of the program see line %d\n", l_num);break;
+  case 10: printf("Syntax Error: Memory Overflow. Can't analyse code past this line %d\n", l_num); memory_dealloc(); exit(1);
+  default: printf("Syntax Error on line %d\n", l_num);
   }
-  exit(1); }
+  error = 1;
+  return; }
 
 void next_ch() { ch = getchar(); }
 
@@ -121,10 +127,12 @@ struct node
 
 typedef struct node node;
 
+node *root;
+
 node *new_node(int k)
 {
   node *x = malloc(sizeof(node));
-  if(x == NULL) printf("Overflow due to too many nodes");
+  if(x == NULL) syntax_error(10);
   x->kind = k;
   return x;
 }
@@ -383,9 +391,12 @@ void compilation_error(int code)
   case 3: printf("Compilation Error: Jump to label out of bounds\n"); break;
   case 4: printf("Compilation Error: Continue or break not nested in loop\n"); break;
   case 5: printf("Compilation Error: Continue or break with ID not in a nesting loop \n"); break;
-  case 6: printf("Compilation Error: Plus de place pour du code\n"); break;
+  case 6: printf("Compilation Error: No memory available for compilation\n"); memory_dealloc(); exit(1);
+  case 7: printf("Compilation Error: Maximum nested loops exceeded\n"); memory_dealloc(); exit(1);
+  default: printf("Compilation Error:\n");
   }
-  exit(1);
+  error = 1;
+  return;
 }
 
 enum { ILOAD, ISTORE, BIPUSH, DUP, POP, IADD, ISUB, IMULT,
@@ -516,7 +527,7 @@ void c(node *x)
                      assignLoopExit(p1, here); current_loop--; break;
                    }
 
-      case DO    : { code *p1 = here; current_loop++; c(x->o1);
+      case DO    : { code *p1 = here; current_loop++; if(current_loop > 128) compilation_error(7); c(x->o1);
                      c(x->o2);
                      gi(IFNE); fix(here++,p1);
                      assignLoopExit(p1, here); current_loop--; break;
@@ -635,7 +646,7 @@ void breaksAndContinues(code *jump, int next_stop, code *operator[])
 				{
 					fix(operator[i],jump);
 					operator[i] = NULL;
-          break;
+          			break;
 				}
 		}
 	}
@@ -671,7 +682,12 @@ void run()
         case IPRINT: printf("%d \n", sp[-1]); --sp;      break;
         case RETURN: return;
     }
-    if(sp-stack > 1000) printf("Stack overflow");
+    if(sp-stack > 1000)
+    { 
+    	printf("Stack overflow\n"); 
+    	memory_dealloc();
+    	exit(1);
+    }
   }
 }
 
@@ -679,14 +695,31 @@ void run()
 
 /* Programme principal. */
 
+//Fonction qui dealloue la memoire de l'ASA.
+void memory_deallocation(node *x)
+{
+	if(x->o1 == NULL && x->o2 == NULL && x->o3 == NULL) return;
+	else
+	{
+		if(x->o1 != NULL){ memory_deallocation(x->o1); free(x->o1); }
+		if(x->o2 != NULL){ memory_deallocation(x->o2); free(x->o2); }
+		if(x->o3 != NULL){ memory_deallocation(x->o3); free(x->o3); }
+	}
+}
+
+void memory_dealloc()
+{
+	memory_deallocation(root);
+}
+
 int main()
 {
   int i;
 
   for (i=0; i<26; i++) //Initialise les valeurs des labels
     labels[i] = NULL;
-
-  c(program());
+  root = program();
+  c(root);
   assignlabel();
 
 #ifdef SHOW_CODE
@@ -695,8 +728,9 @@ int main()
 
   for (i=0; i<26; i++)
     globals[i] = 0;
-
-  run();
+  
+  if(error == 0) run();
+  memory_deallocation(root);
 
   // for (i=0; i<26; i++)
   //   if (globals[i] != 0)
