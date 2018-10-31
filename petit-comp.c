@@ -134,6 +134,9 @@ node *new_node(int k)
   node *x = malloc(sizeof(node));
   if(x == NULL) syntax_error(10);
   x->kind = k;
+  x->o1 = NULL;
+  x->o2 = NULL;
+  x->o3 = NULL;
   return x;
 }
 
@@ -683,8 +686,8 @@ void run()
         case RETURN: return;
     }
     if(sp-stack > 1000)
-    { 
-    	printf("Stack overflow\n"); 
+    {
+    	printf("Stack overflow\n");
     	memory_dealloc();
     	exit(1);
     }
@@ -704,6 +707,7 @@ void memory_deallocation(node *x)
 		if(x->o1 != NULL){ memory_deallocation(x->o1); free(x->o1); }
 		if(x->o2 != NULL){ memory_deallocation(x->o2); free(x->o2); }
 		if(x->o3 != NULL){ memory_deallocation(x->o3); free(x->o3); }
+    return;
 	}
 }
 
@@ -728,7 +732,7 @@ int main()
 
   for (i=0; i<26; i++)
     globals[i] = 0;
-  
+
   if(error == 0) run();
   memory_deallocation(root);
 
