@@ -428,7 +428,7 @@ int current_loop = 27;
 
 void gen(code c) {*here++ = c; if(here-object>1000) compilation_error(6);} //checks for overflow overflow
 void assignLoopExit(code *start, code *end); /*foward declaration*/
-void breaksAndContinues(code *jump, int next_stop, code *operator[]); /*Forward Declaration */
+void breaksAndContinues(code *jump, int next_stop, code *operator[], code *start); /*Forward Declaration */
 
 #ifdef SHOW_CODE
 #define g(c) do { printf(" %d",c); gen(c); } while (0)
@@ -625,10 +625,10 @@ void assignLoopExit(code *start, code *end)
   for(int i=0; i<26; i++) if(labels[i] == nameofloop) names[num_name++] = i;
 
   //Update les break
-  breaksAndContinues(end, next_brk, brk);
+  breaksAndContinues(end, next_brk, brk, start);
 
   //Update les continues dans les boucles
-  breaksAndContinues(start, next_continu, continu);
+  breaksAndContinues(start, next_continu, continu, start);
 
   // verifie que tout les continue et break on ete assigne a la fin de la boucle la plus englobante
   if(current_loop == 28)
@@ -642,7 +642,7 @@ void assignLoopExit(code *start, code *end)
   }
 }
 /*Methode qui s'occupe d'updater les breaks et les continues vers leurs boucles */
-void breaksAndContinues(code *jump, int next_stop, code *operator[])
+void breaksAndContinues(code *jump, int next_stop, code *operator[], code *start)
 {
 	//Verifie les operandes a updater dans les loops
 	for(int i=0; i<next_stop; i++)
@@ -657,6 +657,7 @@ void breaksAndContinues(code *jump, int next_stop, code *operator[])
 		//cas ou il y a une etiquette
 		else
 		{
+      if (operator[i] > start)
 			for (int j = 0; j<num_name; j++)
 				if(*operator[i] == names[j])
 				{
