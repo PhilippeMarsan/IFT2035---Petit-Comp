@@ -1,5 +1,5 @@
 /* fichier: "petit-comp.c" */
-
+/* Auteurs: Daniel El-Masri (20096261) et Philippe Marsan-Loyer (1054077)
 /* Un petit compilateur et machine virtuelle pour un sous-ensemble de C.  */
 
 #include <stdio.h>
@@ -12,15 +12,14 @@
 
 void memory_dealloc(); //Forward declaration
 
-int error = 0; //Valide si le programme peut s'executer ou non
-int memory_avail = 0;
-
 int l_num = 1;  //compte la ligne du code analyser
 
+/* Ajout des mots PRINT_SYM, GOTO_SYM, CONT_SYM, BREAK_SYM, STAR, PERC, SLASH,
+   GREATER, EXCLM, COLON */
 enum { DO_SYM, ELSE_SYM, IF_SYM, WHILE_SYM, PRINT_SYM, GOTO_SYM, BRK_SYM, CON_SYM, LBRA, RBRA, LPAR,
        RPAR, PLUS, MINUS, LESS, SEMI, EQUAL, INT, ID, EOI, STAR, PERC, SLASH,
        GREATER, EXCLM, COLON};
-
+/* ajout des mots "print","goto", "break", "continue" */
 char *words[] = { "do", "else", "if", "while", "print","goto", "break", "continue",NULL };
 
 int ch = ' ';
@@ -28,6 +27,7 @@ int sym;
 int int_val;
 char id_name[100];
 
+/* Gestion des erreurs repéré durant l'analyse syntaxique et lexicale. Elles sont traités comme des erreurs fatales */
 void syntax_error(int cas)
 {
   switch (cas)
@@ -41,16 +41,19 @@ void syntax_error(int cas)
   case 7:  printf("Syntax Error: Expecting a paranthese '(' on line %d\n", l_num);break;
   case 8:  printf("Syntax Error: instruction or id name on line %d is too long\n", l_num);break;
   case 9:  printf("Syntax Error: Number out of the range[-128,127] can't be assigned at the start of the program see line %d\n", l_num);break;
-  case 10: printf("Syntax Error: Memory Overflow. Can't analyse code past this line %d\n", l_num); memory_avail = 1; memory_dealloc(); exit(1);
+  case 10: printf("Syntax Error: Memory Overflow. Can't analyse code past this line %d\n", l_num); break;
   case 11: printf("Syntax Error: Not a label following a break, continue or goto on line %d\n", l_num);break;
+  case 13: printf("Syntax Error: Assignment to Illegal ID on line %d\n", l_num); break;
   case 12: printf("Syntax Error: Unexpected end of File on line %d\n", l_num); break;
   default: printf("Syntax Error on line %d\n", l_num);
   }
-  error = 1;
+  printf("----------Abrupt End of Syntax Analysis-------------\n\n");
+  memory_dealloc(); exit(1);
   return; }
 
 void next_ch() { ch = getchar(); }
 
+/* Ajout des symboles STAR, PERC, SLASH, GREATER, EXCLM, COLON*/
 void next_sym()
 {
   while (ch == ' ' || ch == '\n' || ch == '\t') {if (ch == '\n') l_num++; next_ch();}
@@ -79,7 +82,7 @@ void next_sym()
             while (ch >= '0' && ch <= '9')
               {
                 int_val = int_val*10 + (ch - '0');
-                if (!(int_val > (-128) && int_val < 127)) syntax_error(9);
+                if (!(int_val > (-128) && int_val < 127)) syntax_error(9); 
                 next_ch();
               }
 
@@ -115,6 +118,7 @@ void next_sym()
 
 /* Analyseur syntaxique. */
 
+/* Ajout des mots GT, NOEQ, EQ, LTEQ, GTEQ, PRINT, MULT, MOD, DIV, LABEL, GOTON, BREAK, CONT*/
 enum { VAR, CST, ADD, SUB, LT, GT, NOEQ, EQ, LTEQ, GTEQ, ASSIGN,
        IF1, IF2, WHILE, DO, EMPTY, SEQ, EXPR, PROG, PRINT,
        MULT, MOD, DIV, LABEL, GOTON, BREAK, CONT};
@@ -134,9 +138,8 @@ node *root;
 
 node *new_node(int k)
 {
-  if (memory_avail) return NULL;
   node *x = malloc(sizeof(node));
-  if(x == NULL) {syntax_error(10); return NULL;}
+  if(x == NULL) syntax_error(10);
   x->kind = k;
   x->o1 = NULL;
   x->o2 = NULL;
@@ -169,20 +172,14 @@ node *term() /* <term> ::= <id> | <int> | <paren_expr> */
   return x;
 }
 
-node *sum() /* <sum> ::= <term>|<sum>"+"<term>|<sum>"-"<term>|<sum>"+""<mul>|<sum>"-"<mul> */
+node *sum() /* <sum> ::= <mult> | <sum>"+""<mul> | <sum>"-"<mul> */
 {
-  node *x = term();
+  node *x = mult(); /* <sum> ::= <mult> */
 
-  while (sym == PLUS || sym == MINUS || sym == STAR || sym == PERC || sym == SLASH)
+  while (sym == PLUS || sym == MINUS)
     {
       node *t = x;
-      switch(sym)
-      {
-        case STAR:  x = new_node(MULT); break;
-        case PERC:  x = new_node(MOD);  break;
-        case SLASH: x = new_node(DIV);  break;
-        default: x = new_node(sym==PLUS ? ADD : SUB);
-      }
+      x = new_node(sym==PLUS ? ADD : SUB); /* <sum>"+""<mul> | <sum>"-"<mul> */
       next_sym();
       x->o1 = t;
       x->o2 = mult();
@@ -191,18 +188,18 @@ node *sum() /* <sum> ::= <term>|<sum>"+"<term>|<sum>"-"<term>|<sum>"+""<mul>|<su
   return x;
 }
 
-node *mult() /* <mult> ::= <term>|<mult> "*" <term>|<mult> "/" <term>|<mult> "%" <term> */
+node *mult() /* <mult> ::= <term> | <mult> "*" <term> | <mult> "/" <term> | <mult> "%" <term> */
 {
-  node *x = term();
+  node *x = term(); /* <mult> ::= <term> */
 
   while(sym == STAR || sym == PERC || sym == SLASH)
   {
     node *t = x;
     switch(sym)
     {
-      case STAR:  x = new_node(MULT); break;
-      case PERC:  x = new_node(MOD);  break;
-      case SLASH: x = new_node(DIV);  break;
+      case STAR:  x = new_node(MULT); break; /* <mult> "*" <term> */
+      case PERC:  x = new_node(MOD);  break; /* <mult> "%" <term> */
+      case SLASH: x = new_node(DIV);  break; /* <mult> "/" <term> */
     }
     next_sym();
     x->o1 = t;
@@ -211,23 +208,24 @@ node *mult() /* <mult> ::= <term>|<mult> "*" <term>|<mult> "/" <term>|<mult> "%"
   return x;
 }
 
-node *test() /* <test> ::= <sum> | <sum> "<" <sum>| <sum> "<=" <sum>| <sum> ">" <sum>
+node *test() /* <test> ::= <sum> | <sum> "<" <sum> | <sum> "<=" <sum> | <sum> ">" <sum>
 | <sum> ">=" <sum>| <sum> "==" <sum>| <sum> "!=" <sum> */
 {
-  node *x = sum();
+  node *x = sum(); //<test> ::= <sum>
 
+  /* Le traitement du cas "==" est traité dans les expressions expr()*/
   if (sym == LESS || sym == GREATER || sym == EXCLM)
     {
       node *t = x;
       switch(sym)
       {
-        case LESS:    next_sym(); if (sym == EQUAL) {x = new_node(LTEQ); next_sym();}
-                                  else x = new_node(LT);
+        case LESS:    next_sym(); if (sym == EQUAL) {x = new_node(LTEQ); next_sym();} //<sum> "<=" <sum>
+                                  else x = new_node(LT); //<sum> "<" <sum>
                                   break;
-        case GREATER: next_sym(); if (sym == EQUAL) {x = new_node(GTEQ); next_sym();}
-                                  else x = new_node(GT);
+        case GREATER: next_sym(); if (sym == EQUAL) {x = new_node(GTEQ); next_sym();} //<sum> ">=" <sum>
+                                  else x = new_node(GT); //<sum> ">" <sum>
                                   break;
-        case EXCLM:   next_sym(); if(sym == EQUAL) { x = new_node(NOEQ); next_sym();}
+        case EXCLM:   next_sym(); if(sym == EQUAL) { x = new_node(NOEQ); next_sym();} //<sum> "!=" <sum>
                                   else syntax_error(4);
                                   break;
       }
@@ -241,22 +239,23 @@ node *expr() /* <expr> ::= <test> | <id> "=" <expr> */
 {
   node *x;
 
-  x = test();
+  x = test(); 
 
-  if (sym == EQUAL)
+  if (sym == EQUAL) 
     {
       node *t = x;
       next_sym();
       if(sym == EQUAL) //Test si il s'agit d'un test ou un assign
       {
-        x = new_node(EQ);
+        x = new_node(EQ); //<expr> ::= <test>
         next_sym();
         x->o1 = t;
         x->o2 = sum();
       }
       else
       {
-        x = new_node(ASSIGN);
+      	if(t->kind != VAR) syntax_error(13); //Verifie que l'assignation se fait sur une variable legal
+        x = new_node(ASSIGN); //<id> "=" <expr>
         x->o1 = t;
         x->o2 = expr();
       }
@@ -401,6 +400,8 @@ node *program()  /* <program> ::= <stat> */
 /*---------------------------------------------------------------------------*/
 
 /* Generateur de code. */
+
+/* Gestion des erreurs repéré durant la compilation. Elles sont traités comme des erreurs fatales */
 void compilation_error(int code)
 {
   switch (code)
@@ -410,31 +411,31 @@ void compilation_error(int code)
   case 3: printf("Compilation Error: Jump to label out of bounds\n"); break;
   case 4: printf("Compilation Error: Continue or break not nested in loop\n"); break;
   case 5: printf("Compilation Error: Continue or break with ID not in a nesting loop \n"); break;
-  case 6: printf("Compilation Error: No memory available for compilation\n");
-          memory_dealloc(); printf("--------Abrupt Stop of Compilation--------\n\n"); exit(1);
-  case 7: printf("Compilation Error: Maximum nested loops exceeded\n");
-          memory_dealloc(); printf("--------Abrupt Stop of Compilation--------\n\n"); exit(1);
+  case 6: printf("Compilation Error: No memory available for compilation\n"); break;
+  case 7: printf("Compilation Error: Maximum nested loops exceeded\n"); break;
   default: printf("Compilation Error:\n");
   }
-  error = 1;
+  printf("----------Abrupt End of Compilation-------------\n\n");
+  memory_dealloc(); exit(1);
   return;
 }
-
+ /* Ajout des mots IMULT,
+       IMOD, IDIV, IPRINT, IMULT */
 enum { ILOAD, ISTORE, BIPUSH, DUP, POP, IADD, ISUB, IMULT,
        IMOD, IDIV, GOTO, IFEQ, IFNE, IFLT, RETURN, IPRINT };
 
 typedef signed char code;
 
 code object[1000], *here = object;
-code *jump[501], next_jump = 0;
-code *labels[26];
-code *continu[501],  next_continu = 0; //il ne peut y avoir plus de boucle
-code *brk[501], next_brk = 0; //meme chose que les continue
-int names[26]; int num_name = 0; //utile pour la verification des loops
-int current_loop = 27;
+code *jump[501], next_jump = 0; //enregistre les adresses des sauts pour les gotos
+code *labels[26]; //pointeur vers les lignes du code des labels
+code *continu[501],  next_continu = 0; //meme chose que jump mais pour les continues
+code *brk[501], next_brk = 0; //meme chose que jump mais pour les breaks
+int names[26]; int num_name = 0; //étiquettes associé aux boucles
+int current_loop = 27; //enregistre la loop dans laquelle on est
 
-void gen(code c) {*here++ = c; if(here-object>=1000) compilation_error(6);} //checks for overflow overflow
-void assignLoopExit(code *start, code *end); /*foward declaration*/
+void gen(code c) {*here++ = c; if(here-object>=1000) compilation_error(6);}
+void assignLoopExit(code *start, code *end); /*Foward Declaration*/
 void breaksAndContinues(code *jump, int next_stop, code *operator[], code *start); /*Forward Declaration */
 
 #ifdef SHOW_CODE
@@ -488,7 +489,7 @@ void c(node *x)
        case LTEQ : gi(BIPUSH); g(1);
                    c(x->o1);
                    c(x->o2);
-                   gi(BIPUSH); g(1); //Puisqu'il s'agit d'entier la strategie fonctionne
+                   gi(BIPUSH); g(1); 
                    gi(IADD);
                    gi(ISUB);
                    gi(IFLT); g(4);
@@ -498,7 +499,7 @@ void c(node *x)
        case GTEQ : gi(BIPUSH); g(1);
                    c(x->o2);
                    c(x->o1);
-                   gi(BIPUSH); g(1); //Puisqu'il s'agit d'entier la strategie fonctionne
+                   gi(BIPUSH); g(1);
                    gi(IADD);
                    gi(ISUB);
                    gi(IFLT); g(4);
@@ -541,7 +542,7 @@ void c(node *x)
                    }
 
       case WHILE : { code *p1 = here, *p2; current_loop++;
-                     if(current_loop > 128) compilation_error(7); c(x->o1);
+                     if(current_loop > 128) compilation_error(7); c(x->o1); 
                      c(x->o1);
                      gi(IFEQ); p2 = here++;
                      c(x->o2);
@@ -593,7 +594,7 @@ void c(node *x)
                    }
 
       case LABEL : {
-                     if(labels[x->o1->val] != NULL) compilation_error(1); //le label a deja ete utilise
+                     if(labels[x->o1->val] != NULL) compilation_error(1);
                      labels[x->o1->val] = here;
                      c(x->o2); break;
                    }
@@ -613,7 +614,7 @@ void c(node *x)
     }
 
 }
-/*Assingning the jump to goto, break and continue statement*/
+/*Asigne les jumps aux gotos. Méthode appelé à la fin de la compilation du code complet*/
 void assignlabel()
 {
   for(int i=0; i<next_jump; i++)
@@ -623,7 +624,7 @@ void assignlabel()
     }
 }
 
-
+/*Update l'indexation des breaks et continues, Méthode lancé à chaque fin d'une boucle*/
 void assignLoopExit(code *start, code *end)
 {
   /*Donne les etiquettes assigne a une loop*/
@@ -648,7 +649,8 @@ void assignLoopExit(code *start, code *end)
     }
   }
 }
-/*Methode qui s'occupe d'updater les breaks et les continues vers leurs boucles */
+
+/* Généralisation du traitement des break et continues */
 void breaksAndContinues(code *jump, int next_stop, code *operator[], code *start)
 {
 	//Verifie les operandes a updater dans les loops
@@ -678,15 +680,19 @@ void breaksAndContinues(code *jump, int next_stop, code *operator[], code *start
 /*---------------------------------------------------------------------------*/
 
 /* Machine virtuelle. */
+
+/* Gestion des erreurs repéré durant l'execution. Elles sont traités comme des erreurs fatales */
 void execution_error(int code)
 {
   switch (code)
   {
   case 1: printf("Execution Error: Division or Modulo by zero\n"); break;
+  case 2: printf("Execution Error: Stack Overflow\n"); break;
   default: printf("Execution Error:\n");
   }
-  memory_dealloc(); printf("-------End of Execution-------\n\n"); exit(1);
+  printf("-------Abrupt End of Execution-------\n\n"); exit(1);
 }
+
 int globals[26];
 
 void run()
@@ -717,12 +723,7 @@ void run()
         case RETURN: return;
     }
 
-    if(sp-stack > 1000)
-    {
-    	printf("Stack overflow\n");
-    	memory_dealloc();
-    	exit(1);
-    }
+    if(sp-stack >= 1000) execution_error(2);
   }
 }
 
@@ -743,10 +744,14 @@ void memory_deallocation(node *x)
 	}
 }
 
+/* Méthode appelé pour désallouer la mémoire*/
 void memory_dealloc()
 {
-	memory_deallocation(root);
-  free(root);
+	if(root != NULL)
+	{
+		memory_deallocation(root);
+		free(root);
+	}
 }
 
 int main()
@@ -768,9 +773,9 @@ int main()
   for (i=0; i<26; i++) //Initialise les valeurs des variables global
     globals[i] = 0;
 
+  run();
+  printf("-------End of Execution-------\n\n");
   memory_dealloc();
-  if(error == 0) {run(); printf("-------End of Execution-------\n\n");}
-
 
   // for (i=0; i<26; i++)
   //   if (globals[i] != 0)
