@@ -13,6 +13,7 @@
 void memory_dealloc(); //Forward declaration
 
 int error = 0; //Valide si le programme peut s'executer ou non
+int memory_avail = 0;
 
 int l_num = 1;  //compte la ligne du code analyser
 
@@ -40,8 +41,9 @@ void syntax_error(int cas)
   case 7:  printf("Syntax Error: Expecting a paranthese '(' on line %d\n", l_num);break;
   case 8:  printf("Syntax Error: instruction or id name on line %d is too long\n", l_num);break;
   case 9:  printf("Syntax Error: Number out of the range[-128,127] can't be assigned at the start of the program see line %d\n", l_num);break;
-  case 10: printf("Syntax Error: Memory Overflow. Can't analyse code past this line %d\n", l_num); memory_dealloc(); exit(1);
+  case 10: printf("Syntax Error: Memory Overflow. Can't analyse code past this line %d\n", l_num); memory_avail = 1; memory_dealloc(); exit(1);
   case 11: printf("Syntax Error: Not a label following a break, continue or goto on line %d\n", l_num);break;
+  case 12: printf("Syntax Error: Unexpected end of File on line %d\n", l_num); break;
   default: printf("Syntax Error on line %d\n", l_num);
   }
   error = 1;
@@ -132,8 +134,9 @@ node *root;
 
 node *new_node(int k)
 {
+  if (memory_avail) return NULL;
   node *x = malloc(sizeof(node));
-  if(x == NULL) syntax_error(10);
+  if(x == NULL) {syntax_error(10); return NULL;}
   x->kind = k;
   x->o1 = NULL;
   x->o2 = NULL;
@@ -317,6 +320,7 @@ node *statement()
       next_sym();
       while (sym != RBRA)
         {
+          if (sym == EOI) {syntax_error(12); return x;}
           node *t = x;
           x = new_node(SEQ);
           x->o1 = t;
@@ -369,6 +373,7 @@ node *statement()
 
   else  /* <expr> ";" */
     {
+      if (sym == EOI) {syntax_error(12); return (x = new_node(EMPTY));}
       x = new_node(EXPR);
       x->o1 = expr();
       if (sym == COLON) //Repere et test les labels
@@ -405,8 +410,10 @@ void compilation_error(int code)
   case 3: printf("Compilation Error: Jump to label out of bounds\n"); break;
   case 4: printf("Compilation Error: Continue or break not nested in loop\n"); break;
   case 5: printf("Compilation Error: Continue or break with ID not in a nesting loop \n"); break;
-  case 6: printf("Compilation Error: No memory available for compilation\n"); memory_dealloc(); exit(1);
-  case 7: printf("Compilation Error: Maximum nested loops exceeded\n"); memory_dealloc(); exit(1);
+  case 6: printf("Compilation Error: No memory available for compilation\n");
+          memory_dealloc(); printf("--------Abrupt Stop of Compilation--------\n\n"); exit(1);
+  case 7: printf("Compilation Error: Maximum nested loops exceeded\n");
+          memory_dealloc(); printf("--------Abrupt Stop of Compilation--------\n\n"); exit(1);
   default: printf("Compilation Error:\n");
   }
   error = 1;
@@ -426,7 +433,7 @@ code *brk[501], next_brk = 0; //meme chose que les continue
 int names[26]; int num_name = 0; //utile pour la verification des loops
 int current_loop = 27;
 
-void gen(code c) {*here++ = c; if(here-object>1000) compilation_error(6);} //checks for overflow overflow
+void gen(code c) {*here++ = c; if(here-object>=1000) compilation_error(6);} //checks for overflow overflow
 void assignLoopExit(code *start, code *end); /*foward declaration*/
 void breaksAndContinues(code *jump, int next_stop, code *operator[], code *start); /*Forward Declaration */
 
@@ -761,9 +768,8 @@ int main()
   for (i=0; i<26; i++) //Initialise les valeurs des variables global
     globals[i] = 0;
 
-
-  if(error == 0) {run(); printf("-------End of Execution-------\n\n");}
   memory_dealloc();
+  if(error == 0) {run(); printf("-------End of Execution-------\n\n");}
 
 
   // for (i=0; i<26; i++)
